@@ -1,6 +1,6 @@
 Name: acti-recorder
 Version: 0.1
-Release: 1
+Release: alt1
 
 Summary: Recording video from acti cameras
 License: GPLv3
@@ -35,6 +35,6 @@ install -pD %SOURCE1 %{buildroot}usr/share/doc/%name-%version/README
 %_sysconfdir/*.conf
 
 %changelog
-* Sat Dec 18 2010 Denis Klimov <zver@altlinux.org> 0.1-1
+* Sat Dec 18 2010 Denis Klimov <zver@altlinux.org> 0.1-alt1
 - Initial package for ALT Linux
 
