@@ -12,6 +12,8 @@ BuildArch: noarch
 Requires: bc
 
 Source: %name-%version.tar
+Source1: README
+
 
 %description
 Simple script for record video from ACTI camera.
@@ -23,10 +25,12 @@ acti-recorder start recording when motion was detected.
 %build
 
 %install
+ls -la 
+install -pD %SOURCE1 %{buildroot}usr/share/doc/%name-%version/README
 %makeinstall_std
 
+
 %files
-%doc README
 %_bindir/*
 %_sysconfdir/*.conf
 

@@ -1,1 +1,2 @@
-tar: acti-recorder
+tar: src name=acti-recorder-@version@
+copy: README
