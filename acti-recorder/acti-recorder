@@ -1,0 +1,95 @@
+#!/bin/bash
+
+# ACTI Recorder.
+# Copyright (C) 2010  Denis Klimov
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+
+if [ -z "$1" ]; then
+	if [ -f "acti-recorder.conf" ]; then
+		CONFIG="acti-recorder.conf"
+	elif [ -f "/etc/acti-recorder.conf" ]; then
+		CONFIG="/etc/acti-recorder.conf"
+	elif [ -f "/usr/local/etc/acti-recorder.conf" ]; then
+		CONFIG="/usr/local/etc/acti-recorder.conf"
+	fi
+else
+	CONFIG="$1"
+fi
+
+if [ ! -f "$CONFIG" ]; then
+	echo "Config doesn't exist"
+	exit 1
+fi
+
+echo "Using config $CONFIG"
+. $CONFIG
+
+
+if [ ! -d "$VIDEO_DIR" ]; then
+	echo "Directory $VIDEO_DIR doesn't exist. Trying create.."
+	mkdir -p "$VIDEO_DIR"
+fi
+
+
+RECORD_RUNING=0
+STOP_DELAY_COUNTER=$STOP_DELAY
+
+while true; do
+	# Get alarm bit from camera
+	HEX=`curl "http://$HOST/cgi-bin/mpeg4?USER=$USER&PWD=$PASSWORD&DIO_STATUS" 2>/dev/null|cut -d 'x' -f2`
+	BIN=`echo "ibase=16; obase=2; $HEX"| bc`
+	BYTE=`printf "%08d" $BIN`
+	i=`echo "8-$RECORD_BIT"|bc`
+	BIT=`echo $BYTE|cut -c $i`
+	echo -n "$BIT"
+
+	# Start record
+	if [ "$BIT" == "1" -a "$RECORD_RUNING" == "0" ]; then
+		rname=`date +/%Y/%Y-%m/%Y-%m-%d/%Y-%m-%d_%H:%M:%S`
+		full_path="$VIDEO_DIR/$rname.avi"
+		mkdir -p `dirname $full_path`
+		echo -e "\nRecord to $full_path"
+		cvlc rtsp://$HOST:$RTSP_PORT --sout "file/avi:$full_path" >/dev/null 2>&1 &
+		RECORD_RUNING=1
+
+		if [ ! -z "$ALARM_COMMAND" ]; then
+			eval $ALARM_COMMAND
+		fi
+	fi
+
+	# Reset stop delay counter
+	if [ "$BIT" == "1" ]; then
+		STOP_DELAY_COUNTER=$STOP_DELAY
+	fi
+
+	# Decrease stop delay counter
+	if [ "$BIT" == "0" -a "$STOP_DELAY_COUNTER" != "0" ]; then
+		STOP_DELAY_COUNTER=`echo "$STOP_DELAY_COUNTER-1"|bc`
+	fi
+
+	# TODO: More accurate stop recording
+	if [ "$BIT" == "0" -a "$RECORD_RUNING" == "1" -a "$STOP_DELAY_COUNTER" == "0" ]; then
+		echo -e "\nStop recording"
+		pkill vlc >/dev/null 2>&1
+		sleep 1
+		pkill -9 vlc >/dev/null 2>&1
+		RECORD_RUNING=0
+	fi
+
+	sleep 1
+done
+

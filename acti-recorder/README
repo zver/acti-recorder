@@ -1,0 +1,9 @@
+
+Simple script for record video from ACTI camera.
+acti-recorder start recording when motion was detected.
+Berfore use you need configure the camera for change trigger state when motion detect.
+Script save video files in directory tree by current date.
+See acti-recorder.conf for config params.
+
+
+P.S. Sorry for my badly English. Any corrects are wellcome.
