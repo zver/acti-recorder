@@ -48,48 +48,68 @@ fi
 RECORD_RUNING=0
 STOP_DELAY_COUNTER=$STOP_DELAY
 
+function start_record() {
+	rname=`date +/%Y/%Y-%m/%Y-%m-%d/%Y-%m-%d_%H:%M:%S`
+	full_path="$VIDEO_DIR/$rname.avi"
+	mkdir -p `dirname $full_path`
+	cvlc rtsp://$HOST:$RTSP_PORT --sout "file/avi:$full_path" >/dev/null 2>&1 &
+	echo $!
+}
+
+function stop_record() {
+	cvlc_pid="$1"
+	kill "$cvlc_pid"
+}
+
 while true; do
-	# Get alarm bit from camera
-	HEX=`curl "http://$HOST/cgi-bin/mpeg4?USER=$USER&PWD=$PASSWORD&DIO_STATUS" 2>/dev/null|cut -d 'x' -f2`
-	BIN=`echo "ibase=16; obase=2; $HEX"| bc`
-	BYTE=`printf "%08d" $BIN`
-	i=`echo "8-$RECORD_BIT"|bc`
-	BIT=`echo $BYTE|cut -c $i`
-	echo -n "$BIT"
-
-	# Start record
-	if [ "$BIT" == "1" -a "$RECORD_RUNING" == "0" ]; then
-		rname=`date +/%Y/%Y-%m/%Y-%m-%d/%Y-%m-%d_%H:%M:%S`
-		full_path="$VIDEO_DIR/$rname.avi"
-		mkdir -p `dirname $full_path`
-		echo -e "\nRecord to $full_path"
-		cvlc rtsp://$HOST:$RTSP_PORT --sout "file/avi:$full_path" >/dev/null 2>&1 &
-		RECORD_RUNING=1
-
-		if [ ! -z "$ALARM_COMMAND" ]; then
-			eval $ALARM_COMMAND
+	if [ "$RECORD_MODE" == "trigger" ]; then 
+		# Get alarm bit from camera
+		HEX=`curl "http://$HOST/cgi-bin/mpeg4?USER=$USER&PWD=$PASSWORD&DIO_STATUS" 2>/dev/null|cut -d 'x' -f2`
+		BIN=`echo "ibase=16; obase=2; $HEX"| bc`
+		BYTE=`printf "%08d" $BIN`
+		i=`echo "8-$RECORD_BIT"|bc`
+		BIT=`echo $BYTE|cut -c $i`
+		echo -n "$BIT"
+	
+		# Start record
+		if [ "$BIT" == "1" -a "$RECORD_RUNING" == "0" ]; then
+			cvlc_pid=`start_record`
+			RECORD_RUNING=1
+	
+			if [ ! -z "$ALARM_COMMAND" ]; then
+				eval $ALARM_COMMAND
+			fi
 		fi
-	fi
-
-	# Reset stop delay counter
-	if [ "$BIT" == "1" ]; then
-		STOP_DELAY_COUNTER=$STOP_DELAY
-	fi
-
-	# Decrease stop delay counter
-	if [ "$BIT" == "0" -a "$STOP_DELAY_COUNTER" != "0" ]; then
-		STOP_DELAY_COUNTER=`echo "$STOP_DELAY_COUNTER-1"|bc`
-	fi
-
-	# TODO: More accurate stop recording
-	if [ "$BIT" == "0" -a "$RECORD_RUNING" == "1" -a "$STOP_DELAY_COUNTER" == "0" ]; then
-		echo -e "\nStop recording"
-		pkill vlc >/dev/null 2>&1
+	
+		# Reset stop delay counter
+		if [ "$BIT" == "1" ]; then
+			STOP_DELAY_COUNTER=$STOP_DELAY
+		fi
+	
+		# Decrease stop delay counter
+		if [ "$BIT" == "0" -a "$STOP_DELAY_COUNTER" != "0" ]; then
+			STOP_DELAY_COUNTER=`echo "$STOP_DELAY_COUNTER-1"|bc`
+		fi
+	
+		# TODO: More accurate stop recording
+		if [ "$BIT" == "0" -a "$RECORD_RUNING" == "1" -a "$STOP_DELAY_COUNTER" == "0" ]; then
+			echo -e "\nStop recording"
+			stop_record $cvlc_pid
+			RECORD_RUNING=0
+		fi
+	
 		sleep 1
-		pkill -9 vlc >/dev/null 2>&1
-		RECORD_RUNING=0
+	elif [ "$RECORD_MODE" == "forever" ]; then
+		# Records each hour in one file.
+		cvlc_pid=`start_record`
+		while [ "$(date +%M:%S)" != "00:00" ]; do
+			sleep 1
+		done
+		sleep 1
+		stop_record $cvlc_pid
+	else
+		echo "Wrong RECORD_MODE: $RECORD_MODE"
+		exit 1
 	fi
-
-	sleep 1
 done
 
